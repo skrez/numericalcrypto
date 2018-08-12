@@ -12,5 +12,10 @@ another quantity: computation time
 
 
 for linear
-for nonlinear (reaction diffusion equation)
+for nonlinear (reaction diffusion equation? Black Schole) 
 
+---
+do we also want to do monte carlo 
+  hamiltonian is secret. initial sample is not secret but future states are secret. 
+Brownian motion?
+Black scholes? 
