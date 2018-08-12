@@ -1,0 +1,16 @@
+- Write implementations for the different methods of computing propagation of linear and nonlinear PDE
+- Use tool to find optimal parameters
+- relinearization? (how do we discuss this/ evaluate this?)
+
+
+2 curves
+What is the maximum depth we can get to without the error blowing up?
+Function of method
+function of problem size
+
+another quantity: computation time
+
+
+for linear
+for nonlinear (reaction diffusion equation)
+
