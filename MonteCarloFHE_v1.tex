@@ -1,0 +1,161 @@
+\documentclass[12pt]{article}
+\usepackage{geometry} 
+\usepackage{color}  
+\usepackage{dsfont}
+\usepackage{amsthm}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{esint}
+\usepackage{graphicx}
+\usepackage{mathrsfs}            % See geometry.pdf to learn the layout options. There are lots.
+\geometry{letterpaper}                   % ... or a4paper or a5paper or ... 
+%\geometry{landscape}                % Activate for for rotated page geometry
+%\usepackage[parfill]{parskip}    % Activate to begin paragraphs with an empty line rather than an indent
+\usepackage{graphicx}
+\usepackage{amssymb}
+\usepackage{epstopdf}
+\DeclareGraphicsRule{.tif}{png}{.png}{`convert #1 `dirname #1`/`basename #1 .tif`.png}
+\newtheorem*{def1}{Definition 1}
+\newtheorem*{def2}{Definition 2}
+\newtheorem*{def3}{Definition 3}
+\newtheorem*{def4}{Definition 4}
+\newtheorem*{def5}{Definition 5}
+\newtheorem*{def6}{Definition 6}
+\newtheorem*{def7}{Definition 7}
+\newtheorem*{def8}{Definition 8}
+\newtheorem*{thm1}{Theorem 1}
+\newtheorem*{thm2}{Theorem 2}
+\newtheorem*{thm3}{Theorem 3}
+\newtheorem*{thm4}{Theorem 4}
+\newtheorem*{lem1}{Lemma 1}
+\DeclareMathOperator{\Proj}{Proj}
+\DeclareMathOperator{\Tr}{Tr}
+\title{Numerical Methods with FHE: \\ Monte Carlo Sampling}
+\author{Jordan Cotler}
+\date{}                                           % Activate to display a given date or no date
+\begin{document}
+\maketitle
+
+\section{Review of Markov Chain Monte Carlo}
+
+Suppose we have a probability distribution with probability density $p(\textbf{x})$ for $\textbf{x} \in \mathbb{R}^d$.  To sample from $p(\textbf{x})$, we will use the Metropolis-Hastings algorithm.\footnote{The probability distribution $p(\textbf{x})$ need not be normalized for most applications, but we will ignore this issue for now since it is easy to deal with.}  First, we choose an initial value $\textbf{x}_0$.  Now we build up a sequence $\{\textbf{x}_0, \textbf{x}_1, \textbf{x}_2,...\}$ as follows.  For $i=0,1,2,...$,
+\begin{enumerate}
+\item Sample $\Delta \textbf{x}$ from the uniform distribution on the ball with radius $c$, centered at the origin.  We say that our step size is $c$. 
+\item Sample a number $r$ uniformly from $0$ to $1$.  If $r < p(\textbf{x}_i + \Delta \textbf{x})/p(\textbf{x}_i)$, let $\textbf{x}_{i+1} = \textbf{x}_i + \Delta \textbf{x}$.  Otherwise, let $\textbf{x}_{i+1} = \textbf{x}_i$.
+\end{enumerate}
+For an appropriate step size $c$, if we build up a sufficiently large sequence $\{\textbf{x}_i\}_{i=1}^N$, then this sequence behaves as a collection of points randomly sampled from $p(\textbf{x})$.
+
+There are many variations on this theme.  One comment is that often $p(\textbf{x})$ is more naturally written in the form $p(\textbf{x}) = e^{- S(\textbf{x})}$.  Then in Step $2$ above, it is more natural to compute the inequality $- \log(r) > S(\textbf{x}_i + \Delta \textbf{x}) - S(\textbf{x}_i)$, although of course this is equivalent to the inequality above by taking the minus logarithm of both sides (and using the fact that on $(0,\infty)$, the function $- \log(\cdot)$ is strictly monotonically decreasing).
+
+
+\section{Proposed FHE Application}
+
+Suppose that Alice has a secret probability distribution $p(\textbf{x})$ that she wants to sample.  We imagine that Bob has computational resources which Alice wants to use, but Alice does not want Bob to know either (i) the probability distributions or (ii) the samples.  Further suppose that $p(\textbf{x})$ can be written as
+\begin{equation}
+p(\textbf{x}) = g(h(\textbf{a},\textbf{x}))
+\end{equation}
+where $\textbf{a} = (a_1,...,a_n)$, $h(\textbf{a},\textbf{x})$ is a function that depends polynomially on the $a_i$'s but can otherwise have arbitrary dependence on $\textbf{x}$, and $g : (0,\infty) \to \mathbb{R}$ is strictly monotonic.  (For instance, we could have $g(y) = e^{-y}$ which is reminiscent of the previous section above.)
+
+The functions $g$ and $h$ are known to both Alice and Bob, but the parameters $\textbf{a}$ are only known to Alice.  This is the sense in which only Alice knows the probability distribution.
+%In general, it is difficult for Bob to determine $\textbf{a}$ is he only has access to samples from $p(\textbf{x})$ (although we should probably figure out in which regimes this is valid).
+The procedure is as follows: Alice encrypts $\textbf{a}$ using FHE, and sends the encrypted version to Bob.  Alice also generates and encrypts an initial sample $\textbf{x}_0$, and sends it to Bob.  (Alternatively, Bob could generate this initial sample, unencrypted.)  Then for $i = 0,1,2,...$,
+\begin{enumerate}
+\item Bob samples $\Delta \textbf{x}$ from the uniform distribution on the ball with radius $c$, centered at the origin.  (Here, $c$ is pre-decided, and unencrypted.)
+\item Bob computes samples a number $r$ uniformly from $0$ to $1$, and then computes $s_i = \pm \, \text{sgn}\left(\left(h(\textbf{x}_i + \Delta \textbf{x}) - h(\textbf{x}_i) \right) - g^{-1}(r) \right)$, which is an encrypted value.  We choose ``$+$'' if $g$ is monotonically increasing, and ``$-$'' if $g$ is monotonically decreasing.  Then $\textbf{x}_{i+1} = \textbf{x}_i + (s_i + 1) \, \Delta \textbf{x}$, which is also an encrypted value.
+\end{enumerate}
+If the error becomes too large after an intermediate step, then Alice may have to decrypt and encrypt the current value of $\textbf{x}_i$ as well as the parameters $\textbf{a}$.
+
+\section{Aside: Garbled Circuits and Monte Carlo Sampling}
+
+A different cryptographic setting is as follows.  Suppose that Alice has some secrete probability distribution $p(\textbf{x})$ that Bob wants to sample from.  As above, we may suppose that form of the function $p(\textbf{x}) = g(h(\textbf{a},\textbf{x}))$ is known to both Alice and Bob, but only Alice knows the parameters $\textbf{a}$.  Then Alice could encrypt a low-depth arithmetic circuit $C$ which maps $C : \textbf{x}_i \mapsto \textbf{x}_{i+1}$, much in the same way as the procedure above.  In this case, Bob can sample from the unknown distribution.  For technological reasons, it is important that $C$ be a low depth arithmetic circuit, since the known garbled circuits protocols have similar difficulties as the known FHE protocols (even though both classes of protocols rely on different methods).
+
+There are many interesting and obvious applications of garbled circuit Monte Carlo sampling.  Here, let me give an example which is less immediately apparent.  There are many dynamical programming algorithms, with applications in AI and finance, which entail the Monte Carlo sampling of some policy distributions $\pi_i(\textbf{x})$.  For instance, in Monte Carlo tree sampling, or in dynamical programming applications of options pricing.  Indeed, it is conceivable that these policy distributions would be proprietary.
+
+\section{Parameterization of the Probability Distribution in Function Space}
+
+For practical reasons, we have considered probability distributions of the form $p(\textbf{x}) = g(h(\textbf{a},\textbf{x}))$ where $h(\textbf{a},\textbf{x})$ is a function that depends polynomially on the $a_i$'s but can otherwise have arbitrary dependence on $\textbf{x}$, and $g : (0,\infty) \to \mathbb{R}$ is strictly monotonic.  As mentioned before, in many applications it is natural to choose $g(y) = e^{-y}$.
+
+Here, we enumerate some useful forms for the function $h(\textbf{a},\textbf{x})$:
+\begin{enumerate}
+\item \textbf{Polynomial.}  Consider $h(\textbf{a},\textbf{x})$ of the form
+\begin{equation}
+h(\textbf{a},\textbf{x}) = \sum_{i_1,...,i_d = 1}^K a_{i_1 \cdots i_d} \, x_1^{i_1} \cdots x_d^{i_d}
+\end{equation}
+where $\textbf{a} \in \mathbb{R}^{\binom{K+d}{K}}$ so that each component of $\textbf{a}$ is an $a_{i_1 \cdots i_d}$.
+\item \textbf{Laurent series.}  Similarly to the polyonomial case, we consider $h(\textbf{a},\textbf{x})$ of the form
+\begin{equation}
+h(\textbf{a},\textbf{x}) = \sum_{i_1,...,i_d = -K}^K a_{i_1 \cdots i_d} \, x_1^{i_1} \cdots x_d^{i_d}
+\end{equation}
+where $\textbf{a} \in \mathbb{R}^{\binom{2K - 1 +d}{2K - 1}}$ so that each component of $\textbf{a}$ is an $a_{i_1 \cdots i_d}$.
+\item \textbf{Quotients of polynomials.} In a similar vein, we may consider
+\begin{equation}
+h(\textbf{a},\textbf{x}) = \frac{\sum_{i_1,...,i_d = 1}^K a_{i_1 \cdots i_d}^{(\text{num})} \, x_1^{i_1} \cdots x_d^{i_d}}{\sum_{i_1,...,i_d = 1}^K a_{i_1 \cdots i_d}^{(\text{denom})} \, x_1^{i_1} \cdots x_d^{i_d}}
+\end{equation}
+where $\textbf{a} = (\textbf{a}^{\text{num}}, \textbf{a}^{\text{denom}}) \in \mathbb{R}^{\binom{K + d}{K}^2}$.
+\item \textbf{Fourier series.} Suppose, for concreteness, that our distribution is one-dimensional (i.e., $\textbf{x} = x \in \mathbb{R}$), and defined on the compact interval $[0,2\pi]$.  Then we might let
+\begin{equation}
+h(\textbf{a},\textbf{x}) = a_0 + \sum_{k=1}^K \left(a_{2k - 1} \, \cos(k x) + a_{2k} \, \sin(k x) \right)
+\end{equation}
+where $\textbf{a} = (a_0, a_1, ..., a_{2K}) \in \mathbb{R}^{2K+1}$.  This is easy to generalize to other compact regions, and the higher-dimensional analog is also straightforward. 
+\item \textbf{Wavelets.} Instead of doing Fourier expansions, one can also do one of many wavelet expansions.
+\item \textbf{Kernels.} Suppose we are interested in sampling \textit{functions}, such as Gaussian processes.  This is different than previously considered cases above.  Then we may have
+\begin{equation}
+p[\textbf{h}(\textbf{x})] \propto \exp\left(- \frac{1}{2} \int d^d \textbf{x} \,d^d \textbf{y}\, h(\textbf{x}) K(\textbf{x},\textbf{y}) h(\textbf{y}) \right)\,.
+\end{equation}
+So in this context, it appears natural to parameterize the kernel $K(\textbf{x},\textbf{y})$.  For instance, if $K(\textbf{x},\textbf{y}) = K(|\textbf{x}-\textbf{y}|)$, i.e. it is translation-invariant, then it may be natural to parameterize $K(|\textbf{x}-\textbf{y}|)$ as a quotient of polynomials in Fourier space (i.e., after Fourier-transforming with respect to $|\textbf{x}-\textbf{y}|$).  For instance, if $K(\textbf{x},\textbf{y}) = (\nabla_\textbf{x}^2 + m^2) \,\delta^{(d)}(\textbf{x} - \textbf{y})$, then in Fourier space it becomes $\textbf{k}^2 + m^2$.
+\end{enumerate}
+
+\section{Agent-based Stochastic Simulations}
+
+Suppose Alice wants to perform a secret, stochastic agent-based simulation on Bob's computers.  We sketch how to do this with FHE.  For a detail and excellent review of stochastic agent-based simulations, see \cite{agentbased1}.
+
+Suppose the system has $M$ kinds of agents.  The number of each agent at a fixed time is stored as an element of the vector $\vec{v}$.  We require two classes of functions: (i) $\alpha_i = \alpha_i(\vec{v})$ for $i=1,...,R$ are polynomials in the elements of $\vec{v}$, where $\alpha_i$ gives the rate for the $i$th reaction to occur (e.g., there are a total of $R$ possible reactions), and (ii) $\vec{r}_i$ for $i=1,...,R$ are vectors such that $\vec{v} \to \vec{v} + \vec{r}_i$ implements the $i$th reaction.  Then the procedure is as follows: Alice gives encrypts the initial configuration $\vec{v}_0$ and gives it to Bob.  Bob stores $(t_0 = 0, \vec{v}_0)$ as the configuration of the system at the initial time. Then, for $i=1,2,...$,
+\begin{enumerate}
+\item Bob independently samples two numbers $r_1, r_2$ uniformly at random between $0$ and $1$.  The numbers are known to Bob, and thus unencrypted.
+\item Bob computes $\alpha_0 = \sum_{j=1}^R \alpha_j(\vec{v}_{i})$, and lets $t_{i+1} = t_i + \frac{1}{\alpha_0} \log(1/r_1)$.  These numbers are encrypted.
+\item Bob computes the vector $\vec{\beta} = \big(\alpha_1(\vec{v}_i), \cdots , \alpha_R(\vec{v}_i)\big)/\alpha_0$.  Then Bob computes the new vector
+\begin{equation}
+\vec{\gamma} = \big(\sum_{j=1}^1 \beta_j\,,\,\sum_{j=1}^2 \beta_j\,,\,...\,,\,\sum_{j=1}^R \beta_j\big)\,,
+\end{equation}
+which is a vector of accumulating partial sums.  Both $\vec{\beta}$ and $\vec{\gamma}$ are encrypted.
+\item Bob computes
+\begin{equation}
+\vec{\delta} = \frac{1}{2}\,\text{sgn} \odot \big(\vec{\gamma} - (r_2, r_2, ..., r_2) \big) + (1/2, 1/2, ..., 1/2)
+\end{equation}
+where ``$\odot$'' designates a component-wise application of the $\text{sgn}$ function.  Here, $\vec{\delta}$ is encrypted. \\
+\item Bob now computes the encrypted vector
+\begin{equation}
+\vec{\varepsilon} = (\delta_1, \delta_2 - \delta_1, \delta_3 - \delta_2, ..., \delta_R - \delta_{R-1} )\,.
+\end{equation}
+\item Finally, Bob computes the encrypted vector
+\begin{equation}
+\vec{v}_{i+1} = \vec{v}_i + \sum_{j=1}^R \varepsilon_j \, \vec{r}_j
+\end{equation}
+and stores $(t_{i_1}, \vec{v}_{i+1})$ as the next time step of the system.
+\end{enumerate}
+It may be the case that even a single time step of agent-based stochastic simulations are outside the realm of current practical FHE implementations.  In particular, even a single time step may make the FHE error blow up.  Nonetheless, encrypted stochastic simulations of this kind may find great application in the future.
+
+%\section{Applications}
+%Here, we list some applications, and go into more depth about one of them (agent-based stochastic simulations).
+%\begin{itemize}
+%\item Models of a financial market -- 
+%\item Gibbs ensembles of many-body systems 
+%\item Agent-based stochastic simulations -- see below.
+%\end{itemize}
+
+\begin{thebibliography}{99}
+
+\bibitem{cryptonets1}
+Gilad-Bachrach, Ran, et al. ``Cryptonets: Applying neural networks to encrypted data with high throughput and accuracy.'' \textit{International Conference on Machine Learning}. 2016.
+
+\bibitem{SEALmanual1}
+Chen, Hao, Kim Laine, and Rachel Player. ``Simple encrypted arithmetic library-SEAL v2.3.0.'' 2017.
+
+\bibitem{agentbased1}
+Erban, Radek, Jonathan Chapman, and Philip Maini. ``A practical guide to stochastic simulations of reaction-diffusion processes.'' \textit{arXiv:0704.1908} (2007).
+
+\end{thebibliography}
+
+
+
+\end{document}  			
